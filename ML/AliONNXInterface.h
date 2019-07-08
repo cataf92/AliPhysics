@@ -16,23 +16,29 @@
 #define ALIONNXINTERFACE_H
 
 #include <string>
-
-class OrtEnv;
-class OrtSessionOptions;
+#include <vector>
+#include "onnxruntime/core/session/onnxruntime_c_api.h"
 
 class AliONNXInterface {
 public:
   AliONNXInterface(std::string name = "", bool debug = false);
-  virtual ~AliONNXInterface(){};
+  ~AliONNXInterface();
 
-  bool LoadXGBoostModel(std::string path);
+  bool LoadXGBoostModel(std::string path, int size);
 
   float Predict(float *features, int size);
 
 private:
+  void checkStatus(OrtStatus* onnx_status);
+
   std::string fInterfaceName;
   OrtEnv* fEnv;
   OrtSessionOptions* fSessionOptions;
+  OrtSession *fSession;
+  const char* fInputNodeName;
+  std::vector<int64_t> fInputNodeDim;  // is assumed that the model has only 1 input node
+  const char* fOutputNodeName;
+  OrtAllocatorInfo* fAllocatorInfo;
 };
 
 #endif
