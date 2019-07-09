@@ -10,7 +10,7 @@
 /// \file AliONNXInterface.h
 /// \brief Implementation of a C++ interface in AliPhysics for the application of 
 ///        ONNX exported models
-/// \author fabio.catalano@cern.ch
+/// \author fabio.catalano@cern.ch, maximiliano.puccio@cern.ch
 
 #ifndef ALIONNXINTERFACE_H
 #define ALIONNXINTERFACE_H
@@ -30,6 +30,7 @@ public:
 
 private:
   void checkStatus(OrtStatus* onnx_status);
+  std::string GetFile(const std::string path);
 
   std::string fInterfaceName;
   OrtEnv* fEnv;

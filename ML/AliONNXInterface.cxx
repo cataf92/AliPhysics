@@ -8,12 +8,15 @@
 // or submit itself to any jurisdiction.
 
 /// \file AliONNXInterface.cxx
-/// \author fabio.catalano@cern.ch
+/// \author fabio.catalano@cern.ch, maximiliano.puccio@cern.ch
 
 #include "AliONNXInterface.h"
-
 #include <iostream>
 #include <cassert>
+#include <TSystem.h>
+#include <TGrid.h>
+#include <TDirectory.h>
+#include <TFile.h>
 
 AliONNXInterface::AliONNXInterface(std::string name, bool debug) :
   fInterfaceName{name},
@@ -43,6 +46,7 @@ AliONNXInterface::AliONNXInterface(std::string name, bool debug) :
 }
 
 AliONNXInterface::~AliONNXInterface(){
+  OrtReleaseAllocatorInfo(fAllocatorInfo);
   OrtReleaseSession(fSession);
   OrtReleaseSessionOptions(fSessionOptions);
   OrtReleaseEnv(fEnv);
@@ -50,9 +54,10 @@ AliONNXInterface::~AliONNXInterface(){
 
 bool AliONNXInterface::LoadXGBoostModel(std::string path, int size) {
   if (path.empty()) {
-    std::cout << "Invalid empty model path string" << std::endl;
+    std::cerr << "Invalid empty model path string!" << std::endl;
     return false;
   }
+  path = GetFile(path);
   OrtAllocator* allocator;
   OrtStatus* status;
   size_t num_input_nodes;
@@ -60,7 +65,7 @@ bool AliONNXInterface::LoadXGBoostModel(std::string path, int size) {
   checkStatus(OrtCreateDefaultAllocator(&allocator));
   status = OrtSessionGetInputCount(fSession, &num_input_nodes);
   if(num_input_nodes != 1) {
-    std::cout << "Case with more than one input node not impelemented!" << std::endl;
+    std::cerr << "Case with more than one input node not impelemented!" << std::endl;
     return false;
   }
   char* input_name;
@@ -73,7 +78,7 @@ bool AliONNXInterface::LoadXGBoostModel(std::string path, int size) {
   fInputNodeDim.resize(num_dims);
   OrtGetDimensions(tensor_info, (int64_t*)fInputNodeDim.data(), num_dims);
   if( size != fInputNodeDim[1]) {
-    std::cout << "The input size entered doesn't match the model one!" << std::endl;
+    std::cerr << "The input size entered doesn't match the model one!" << std::endl;
     return false;
   }
   fOutputNodeName = "probabilities";
@@ -96,7 +101,8 @@ float AliONNXInterface::Predict(float *features, int size) {
   assert(OrtIsTensor(input_tensor));
   // score model & input tensor, get back output tensor
   OrtValue* output_tensor = NULL;
-  checkStatus(OrtRun(fSession, NULL, &fInputNodeName, (const OrtValue* const*)&input_tensor, 1, &fOutputNodeName, 1, &output_tensor));
+  checkStatus(OrtRun(fSession, NULL, &fInputNodeName, (const OrtValue* const*)&input_tensor, 1,
+                     &fOutputNodeName, 1, &output_tensor));
   assert(OrtIsTensor(output_tensor));
   // Get pointer to output tensor float values
   float* floatarr;
@@ -114,5 +120,29 @@ void AliONNXInterface::checkStatus(OrtStatus* onnx_status) {
     std::cerr << msg << std::endl;
     OrtReleaseStatus(onnx_status);
     exit(1);
+  }
+}
+
+std::string AliONNXInterface::GetFile(const std::string path) {
+  if(path.find("alien:") != std::string::npos) {
+    size_t pos = path.find_last_of("/") + 1;
+    std::string model_name = path.substr(pos);
+    if(gGrid == nullptr) {
+      TGrid::Connect("alien://");
+      if(gGrid == nullptr){
+        std::cerr << "Connection to GRID not established!" << std::endl;
+      }
+    }
+    std::string new_path = gSystem->pwd() + std::string("/") + model_name.data();
+    const char *old_root_dir = gDirectory->GetPath();
+    bool cp_status = TFile::Cp(path.data(), new_path.data());
+    gDirectory->cd(old_root_dir);
+    if(!cp_status){
+      std::cerr << "Error in coping file from Alien!\n";
+      return std::string();
+    }
+    return new_path;
+  } else {
+    return path;
   }
 }
